@@ -1,0 +1,212 @@
+---
+title: "Assignment 1 - Dating"
+output: html_notebook
+date: 2024-02-13
+author: Cara Xu
+editor_options: 
+  chunk_output_type: console
+---
+
+
+## Scenario
+
+Imagine you are a data scientist at a respected media outlet -- say the "New York Times". Your editor wants to support the writing of a feature article about *How Couples Meet and Stay Together*. Your editor-in-chief asks you to analyze some data from an [extensive survey conducted by a researcher at Stanford University](https://data.stanford.edu/hcmst).
+
+Since there is **no way that all features of the data can be represented** in such a memo, feel free to pick and choose some patterns that would make for a good story -- outlining important patterns and presenting them in a visually pleasing way.
+
+The full background and text of the story will be researched by a writer of the magazine -- your input should be based on the data and some common sense (i.e. no need to read up on this). It does help, however, to briefly describe what you are presenting and what it highlights.
+
+Provide **polished plots** that are refined enough to include in the magazine with very little further manipulation (already include variable descriptions [if necessary for understanding], titles, source [e.g. "How Couples Meet and Stay Together (Rosenfeld, Reuben, Falcon 2018)"], appropriate colors, fonts etc.) and are understandable to the average reader of the "New York Times". The design does not need to be NYTimes-like. Just be consistent.
+
+```{r}
+library(ggplot2)
+library(tidyverse)
+library(dplyr)
+
+```{r}
+df <- readRDS("~/Desktop/DataVis/HCMST_couples.rds")
+
+#### 1. Dating trends over time
+Visualize how the mode of meeting for the first time has changed over the years.
+
+```{r}
+meet <- distinct(select(df, meeting_type))
+options(max.print = 10000)
+meet
+names(df)
+
+```{r}
+meeting_category <- c("School", "Work", "Online","Community","Other")
+df_simplified <- df %>%
+  mutate(meeting_category = case_when(
+    meeting_type %in% c('Primary or Secondary School', 'college') ~ 'School',
+    meeting_type %in% c('Customer-Client Relationship','One-time Service Interaction','Business Trip','Work Neighbors') ~ 'Work',
+    meeting_type %in% c('Internet','Internet Dating or Phone App', 'Internet Social Network','Online Gaming','Internet Chat','Internet Site','Met Online') ~ 'Online',
+    meeting_type %in% c('Military','Church', 'Volunteer Organization','Bar or Restaurant','Private Party') ~ 'Community',
+    TRUE ~ 'Other'
+  )) %>%
+  group_by(Q21A_Year,Q21A_Month,meeting_category) %>%
+  summarise(count = n(),.groups = 'drop')
+
+meeting_counts <- df_simplified %>%
+  group_by(Q21A_Year, meeting_category) %>%
+  summarise(count = n(), .groups = 'drop') %>%
+  pivot_wider(names_from = meeting_category, values_from = count, values_fill = list(count = 0))
+
+# Line Chart
+ggplot(meeting_counts, aes(x = Q21A_Year)) +
+  geom_line(aes(y = School, colour = "School", group = 1)) +
+  geom_line(aes(y = Work, colour = "Work", group = 1)) +
+  geom_line(aes(y = Online, colour = "Online", group = 1)) +
+  geom_line(aes(y = Community, colour = "Community", group = 1)) +
+    geom_line(aes(y = Other, colour = "Other", group = 1)) +
+  labs(title = "Trend of Meeting Types Over Years",
+       x = "Year",
+       y = "Count",
+       colour = "Meeting Categories") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  scale_x_discrete(breaks = function(x) x[seq(1, length(x), by = 5)])
+
+# Check df_simplified 
+meeting_counts <- df_simplified %>%
+  group_by(Q21A_Year, meeting_category) %>%
+  summarise(count = sum(count), .groups = 'drop')
+
+# Bar Chart
+ggplot(df_simplified, aes(x = Q21A_Year, fill = meeting_category)) +
+  geom_bar(position = "fill", show.legend = TRUE) +
+  scale_fill_brewer(palette = "Set3") + # Use a predefined color palette
+  labs(title = "Distribution of Meeting Types by Year",
+       x = "Year",
+       y = "Proportion",
+       fill = "Meeting Type") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1), 
+        legend.position = "bottom", 
+        legend.title = element_blank(), 
+        plot.title = element_text(size = 14, face = "bold", hjust = 0.5), 
+        axis.title.x = element_text(size = 12, face = "bold"),
+        axis.title.y = element_text(size = 12, face = "bold")) 
+
+#Recommendations to Editors
+
+## Line Chart: It displays the fluctuation in counts of meeting types over years and highlights the trends within each meeting category, allowing for quick comparison of their relative frequencies over time.
+
+## Bar Chart: It illustrates the composition of meeting types for each year, showing how each contributes to the total. I would recommend the stacked bar chart because it provides a more comprehensive view of the data, enabling readers to see the overall trends and the changing dynamics between different meeting types.
+
+#Three Design Choices
+
+## Categorize Data: First we categorize data, and distinct visual elements can quickly convey differences in the categories so that we can make comparison quicker.
+## Change Colors: Color differentiation speeds up data recognition and enables the readers to easily understand.
+## Label Axis: Reducing the frequency of x-axis labels to show every fifth year mitigates clutter can make the chart more readable.
+
+
+#### 2. Age is just a number
+
+ggplot(df, aes(x = ppage, y = Q9, color = ppgender)) +
+  geom_point(alpha = 0.5) +  
+  geom_smooth(method = "lm", se = FALSE, color = "black") + 
+  scale_color_manual(values = c("Male" = "blue", "Female" = "red")) +  
+  labs(title = "Age Relationship Between Couples by Gender",
+       subtitle = "Each point represents a couple; trend lines by gender of the respondent:",
+       x = "Respondent's Age",
+       y = "Partner's Age",
+       color = "Gender") +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+
+
+#### 3. Politics and Dating
+
+Explore how the political affiliation of partners affects how couples meet and stay together.
+
+# 1. Relationship Duration by Political Affiliation
+df_summary <- df %>%
+  group_by(partyid7) %>%
+  summarise(average_duration = mean(duration, na.rm = TRUE)) %>%
+  arrange(desc(average_duration)) 
+
+## Bar Chart
+ggplot(df_summary, aes(x = partyid7, y = average_duration, fill = partyid7)) +
+  geom_col() +
+  labs(title = "Average Relationship Duration by Political Affiliation",
+       x = "Political Affiliation",
+       y = "Average Duration (days)") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+
+# 2. Relationship between political affiliation and growing up in the same city
+df_same_city <- HCMST_couples %>%
+  group_by(partyid7, Q27_2) %>%
+  summarise(count = n(), .groups = 'drop') %>%
+  mutate(same_city = ifelse(Q27_2 == 1, "Yes", "No"),
+         affiliation = factor(partyid7, levels = unique(partyid7[order(count, decreasing = TRUE)]))) 
+
+
+# Plot: Frequency of growing up in the same city by political affiliation
+ggplot(df_same_city, aes(x = affiliation, y = count, fill = same_city)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Growing Up in the Same City by Political Affiliation",
+       x = "Political Affiliation",
+       y = "Count of Couples",
+       fill = "Grew Up in Same City") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Recommendations to Editors: I would choose the first chart because it provides a more unique perspective by evaluating if different political affiliations could affect the length of relationships.
+
+
+#### 4. Your turn to choose
+
+# Relationship between Education Level and Internet Dating Usage
+HCMST_couples$education <- case_when(
+  HCMST_couples$Q10 %in% c('No formal education', '1st-4th grade', '5th or 6th grade') ~ 'Low',
+  HCMST_couples$Q10 %in% c('7th or 8th grade', '9th grade', '10th grade', '11th grade', '12th grade no diploma') ~ 'Lower Middle',
+  HCMST_couples$Q10 %in% c('HS graduate or GED', 'Some college, no degree', 'Associate degree') ~ 'Middle',
+  HCMST_couples$Q10 %in% c('Bachelor’s degree', 'Master’s degree') ~ 'High',
+  HCMST_couples$Q10 %in% c('Professional or Doctorate degree') ~ 'Ultra'
+)
+
+# Group by education level and partner's earnings, and calculate counts
+education_earnings <- HCMST_couples %>%
+  mutate(partner_earnings_category = Q23) %>%
+  group_by(education, partner_earnings_category) %>%
+  summarise(Count = n(), .groups = 'drop') %>%
+  filter(!is.na(education)) 
+
+# Plot: Relationship between education level and partner's earnings
+ggplot(education_earnings, aes(x = education, y = Count, fill = partner_earnings_category)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Partner's Earnings by Education Level",
+       x = "Education Level",
+       y = "Count of Respondents",
+       fill = "Partner's Earnings") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+
+
+Create two (2) charts in this section to highlight some important patterns. Make sure to use some variation in the type of visualizations. Briefly discuss which visualization you recommend to your editor, why you think this visualization is useful, and which patterns it serves to highlight.
+
+### Interactivity
+
+#### 5. Make two plots interactive
+
+Choose 2 of the plots you created above and add interactivity. For at least one of these interactive plots, this should not be done through the use of `ggplotly`. Briefly describe to the editor why interactivity in these visualizations is particularly helpful for a reader.
+
+#### 6. Data Table
+
+To allow the reader to explore the survey data by themselves a bit, select a few useful variables, rename them appropriately for the table to be self-explanatory, and add an interactive data table to the output. Make sure the columns are clearly labeled. Select the appropriate options for the data table (e.g. search bar, sorting, column filters, in-line visualizations etc.). Suggest to the editor which kind of information you would like to provide in a data table and why.
+
+## Technical Details
+
+The data comes in a reasonably clean file. However, if you do find issues with the data, recode any values, etc. please make this clear in the code (and if significant add into the description).
+
+If needed for your visualization, you can add visual drapery like icons, images etc. but you are certainly not obligated to do that. What is important, however, to *use a consistent style across all your visualizations*.
+
+Part of the task will be transforming the dataset into a shape that allows you to plot what you want. For some plots, you will necessarily need to be selective in what to include and what to leave out.
+
+Make sure to use *at least* three different types of graphs, e.g. line graphs, scatter, histograms, bar charts, dot plots, heat maps, etc.
+
+
+
